@@ -3,6 +3,7 @@ import 'package:cook_ease/service/apiservice.dart';
 import 'package:cook_ease/view/detailscreen.dart';
 import 'package:cook_ease/view/favourites.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Homescreen extends StatefulWidget {
   const Homescreen({super.key});
@@ -13,11 +14,14 @@ class Homescreen extends StatefulWidget {
 
 class _HomescreenState extends State<Homescreen> {
   final Apiservice apiservice = Apiservice();
-  String _selectedCategory = 'All';
   final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
+  final List<Recipes> favourites = [];
 
-  late final Future<List<Recipes>?> _recipesFuture;
+  String _selectedCategory = 'All';
+  String _searchQuery = '';
+  late Future<List<Recipes>> _recipesFuture;
+
+  static const String _favKey = 'favourite_ids';
 
   final List<String> _categories = [
     'All',
@@ -27,28 +31,69 @@ class _HomescreenState extends State<Homescreen> {
     'Desserts',
   ];
 
-  static final List<Recipes> favourites = [];
-
   @override
   void initState() {
     super.initState();
-    _recipesFuture = apiservice.fetchrecipes();
+    _recipesFuture = _loadRecipes();
   }
 
-  void _toggleFavourite(Recipes recipe) {
+  Future<List<Recipes>> _loadRecipes() async {
+    final recipes = await apiservice.fetchrecipes();
+    await _loadFavourites(recipes);
+    return recipes;
+  }
+
+  void _retryLoad() {
     setState(() {
-      if (favourites.contains(recipe)) {
-        favourites.remove(recipe);
-        _showSnack('${recipe.name} removed from favourites',
-            Icons.heart_broken_outlined);
-      } else {
-        favourites.add(recipe);
-        _showSnack('${recipe.name} added to favourites', Icons.favorite);
+      _recipesFuture = _loadRecipes();
+    });
+  }
+
+  Future<void> _loadFavourites(List<Recipes> allRecipes) async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedIds = prefs.getStringList(_favKey) ?? [];
+    if (savedIds.isEmpty) return;
+
+    // mounted check before setState
+    if (!mounted) return;
+    setState(() {
+      for (final recipe in allRecipes) {
+        if (savedIds.contains(recipe.id?.toString()) &&
+            !favourites.contains(recipe)) {
+          favourites.add(recipe);
+        }
       }
     });
   }
 
+  Future<void> _saveFavourites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = favourites
+        .where((r) => r.id != null)
+        .map((r) => r.id.toString())
+        .toList();
+    await prefs.setStringList(_favKey, ids);
+  }
+
+  void _toggleFavourite(Recipes recipe) {
+    if (!mounted) return;
+    setState(() {
+      if (favourites.contains(recipe)) {
+        favourites.remove(recipe);
+        _showSnack(
+            '${recipe.name} removed from favourites',
+            Icons.heart_broken_outlined);
+      } else {
+        favourites.add(recipe);
+        _showSnack(
+            '${recipe.name} added to favourites', Icons.favorite);
+      }
+    });
+    _saveFavourites();
+  }
+
   void _showSnack(String message, IconData icon) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -70,15 +115,20 @@ class _HomescreenState extends State<Homescreen> {
   List<Recipes> _filterRecipes(List<Recipes> recipes) {
     return recipes.where((r) {
       final matchesQuery = _searchQuery.isEmpty ||
-          (r.name?.toLowerCase().contains(_searchQuery.toLowerCase()) ??
+          (r.name
+                  ?.toLowerCase()
+                  .contains(_searchQuery.toLowerCase()) ??
               false);
       final matchesCategory = _selectedCategory == 'All' ||
           (r.mealType != null &&
               r.mealType!.any((m) =>
-                  m.toLowerCase() == _selectedCategory.toLowerCase()));
+                  m.toLowerCase() ==
+                  _selectedCategory.toLowerCase()));
       return matchesQuery && matchesCategory;
     }).toList();
   }
+
+  void _dismissKeyboard() => FocusScope.of(context).unfocus();
 
   @override
   void dispose() {
@@ -91,228 +141,297 @@ class _HomescreenState extends State<Homescreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFDF6F0),
       body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
+        onTap: _dismissKeyboard,
         child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Hello, User 👋',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1A1A1A),
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'What do you want to cook today?',
-                        style: TextStyle(
-                            fontSize: 13, color: Color(0xFF888888)),
-                      ),
-                    ],
-                  ),
-                  Stack(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => FavouritesScreen(
-                              favourites: favourites,
-                              onToggleFavourite: _toggleFavourite,
-                            ),
-                          ),
-                        ).then((_) => setState(() {})),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
-                                blurRadius: 10,
-                              )
-                            ],
-                          ),
-                          child: Icon(
-                            favourites.isNotEmpty
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            color: const Color(0xFFE07B2A),
-                            size: 22,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header ──
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'Hello 👋',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF1A1A1A),
+                            letterSpacing: -0.5,
                           ),
                         ),
-                      ),
-                      if (favourites.isNotEmpty)
-                        Positioned(
-                          right: 0,
-                          top: 0,
+                        SizedBox(height: 2),
+                        Text(
+                          'What do you want to cook today?',
+                          style: TextStyle(
+                              fontSize: 13, color: Color(0xFF888888)),
+                        ),
+                      ],
+                    ),
+                    Stack(
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            _dismissKeyboard();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FavouritesScreen(
+                                  favourites: favourites,
+                                  onToggleFavourite: _toggleFavourite,
+                                ),
+                              ),
+                            ).then((_) {
+                              _dismissKeyboard();
+                              if (mounted) setState(() {});
+                            });
+                          },
                           child: Container(
-                            width: 16,
-                            height: 16,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFE07B2A),
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
                               shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF000000)
+                                      .withOpacity(0.08),
+                                  blurRadius: 10,
+                                )
+                              ],
                             ),
-                            child: Center(
-                              child: Text(
-                                '${favourites.length}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                            child: Icon(
+                              favourites.isNotEmpty
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              color: const Color(0xFFE07B2A),
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                        if (favourites.isNotEmpty)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFE07B2A),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${favourites.length}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Search Bar ──
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                    )
+                      ],
+                    ),
                   ],
                 ),
-                child: TextField(
-                  autofocus: false,
-                  controller: _searchController,
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  decoration: InputDecoration(
-                    hintText: 'Search recipes...',
-                    hintStyle: const TextStyle(
-                        color: Color(0xFFBBBBBB), fontSize: 14),
-                    prefixIcon: const Icon(Icons.search,
-                        color: Color(0xFFBBBBBB), size: 20),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? GestureDetector(
-                            onTap: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                            child: const Icon(Icons.close,
-                                color: Color(0xFFBBBBBB), size: 18),
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 14),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Search Bar ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF000000).withOpacity(0.05),
+                        blurRadius: 10,
+                      )
+                    ],
+                  ),
+                  child: TextField(
+                    autofocus: false,
+                    controller: _searchController,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _dismissKeyboard(),
+                    onChanged: (v) {
+                      setState(() => _searchQuery = v);
+                      if (v.isEmpty) _dismissKeyboard();
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search recipes...',
+                      hintStyle: const TextStyle(
+                          color: Color(0xFFBBBBBB), fontSize: 14),
+                      prefixIcon: const Icon(Icons.search,
+                          color: Color(0xFFBBBBBB), size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? GestureDetector(
+                              onTap: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                                _dismissKeyboard();
+                              },
+                              child: const Icon(Icons.close,
+                                  color: Color(0xFFBBBBBB), size: 18),
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // ── Category Chips ──
-            SizedBox(
-              height: 38,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                itemCount: _categories.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, i) {
-                  final cat = _categories[i];
-                  final selected = _selectedCategory == cat;
-                  return GestureDetector(
-                    onTap: () =>
-                        setState(() => _selectedCategory = cat),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 18),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? const Color(0xFFE07B2A)
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: selected
-                            ? [
-                                BoxShadow(
-                                  color: const Color(0xFFE07B2A)
-                                      .withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                )
-                              ]
-                            : [],
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        cat,
-                        style: TextStyle(
+              // ── Category Chips ──
+              SizedBox(
+                height: 38,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: _categories.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, i) {
+                    final cat = _categories[i];
+                    final selected = _selectedCategory == cat;
+                    return GestureDetector(
+                      onTap: () =>
+                          setState(() => _selectedCategory = cat),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        decoration: BoxDecoration(
                           color: selected
-                              ? Colors.white
-                              : const Color(0xFF555555),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                              ? const Color(0xFFE07B2A)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: selected
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFFE07B2A)
+                                        .withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  )
+                                ]
+                              : [],
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          cat,
+                          style: TextStyle(
+                            color: selected
+                                ? Colors.white
+                                : const Color(0xFF555555),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Recipe Grid ──
-            Expanded(
-              child: FutureBuilder<List<Recipes>?>(
-                future: _recipesFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const _ShimmerGrid();
-                  } else if (snapshot.hasError) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.error_outline,
-                              color: Color(0xFFE07B2A), size: 48),
-                          const SizedBox(height: 12),
-                          Text('Something went wrong',
-                              style: TextStyle(color: Colors.grey[600])),
-                        ],
-                      ),
                     );
-                  } else if (snapshot.hasData) {
-                    final filtered = _filterRecipes(snapshot.data!);
-                    if (filtered.isEmpty) {
-                      return const Center(
-                        child: Text('No recipes found 🍽️',
-                            style: TextStyle(color: Color(0xFF888888))),
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Recipe Grid ──
+              Expanded(
+                child: FutureBuilder<List<Recipes>>(
+                  future: _recipesFuture,
+                  builder: (context, snapshot) {
+                    // Loading
+                    if (snapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const _ShimmerGrid();
+                    }
+
+                    // Error
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.wifi_off,
+                                color: Color(0xFFE07B2A), size: 48),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No internet connection',
+                              style: TextStyle(
+                                  color: Colors.grey[700],
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Check your connection and try again',
+                              style: TextStyle(
+                                  color: Colors.grey[500], fontSize: 13),
+                            ),
+                            const SizedBox(height: 20),
+                            GestureDetector(
+                              onTap: _retryLoad,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 28, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE07B2A),
+                                  borderRadius: BorderRadius.circular(24),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFE07B2A)
+                                          .withOpacity(0.35),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    )
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.refresh,
+                                        color: Colors.white, size: 18),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Retry',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       );
                     }
+
+                    // Data loaded
+                    final filtered = _filterRecipes(snapshot.data!);
+
+                    if (filtered.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No recipes found 🍽️',
+                          style: TextStyle(color: Color(0xFF888888)),
+                        ),
+                      );
+                    }
+
                     return GridView.builder(
                       padding:
                           const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -329,30 +448,34 @@ class _HomescreenState extends State<Homescreen> {
                         final isFav = favourites.contains(recipe);
                         return _RecipeCard(
                           recipe: recipe,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DetailScreen(
-                                recipe: recipe,
-                                isFavourite: isFav,
-                                onToggleFavourite: () =>
-                                    _toggleFavourite(recipe),
+                          onTap: () {
+                            _dismissKeyboard();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DetailScreen(
+                                  recipe: recipe,
+                                  isFavourite: isFav,
+                                  onToggleFavourite: () =>
+                                      _toggleFavourite(recipe),
+                                ),
                               ),
-                            ),
-                          ).then((_) => setState(() {})),
+                            ).then((_) {
+                              _dismissKeyboard();
+                              if (mounted) setState(() {});
+                            });
+                          },
                         );
                       },
                     );
-                  } else {
-                    return const Center(child: Text('No Data'));
-                  }
-                },
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -422,7 +545,7 @@ class _ShimmerCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: const Color(0xFF000000).withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 3),
           )
@@ -431,36 +554,24 @@ class _ShimmerCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Image placeholder
           Expanded(
             child: ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(16)),
               child: _shimmerBox(
-                width: double.infinity,
-                height: double.infinity,
-                shimmerValue: shimmerValue,
-                borderRadius: 0,
-              ),
+                  width: double.infinity,
+                  height: double.infinity,
+                  borderRadius: 0),
             ),
           ),
-          // Text placeholders
           Padding(
             padding: const EdgeInsets.all(10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _shimmerBox(
-                    width: 100,
-                    height: 12,
-                    shimmerValue: shimmerValue,
-                    borderRadius: 6),
+                _shimmerBox(width: 100, height: 12, borderRadius: 6),
                 const SizedBox(height: 8),
-                _shimmerBox(
-                    width: 70,
-                    height: 10,
-                    shimmerValue: shimmerValue,
-                    borderRadius: 6),
+                _shimmerBox(width: 70, height: 10, borderRadius: 6),
               ],
             ),
           ),
@@ -472,7 +583,6 @@ class _ShimmerCard extends StatelessWidget {
   Widget _shimmerBox({
     required double width,
     required double height,
-    required double shimmerValue,
     required double borderRadius,
   }) {
     return Container(
@@ -506,15 +616,12 @@ class _SlidingGradientTransform extends GradientTransform {
   }
 }
 
-// ── Recipe Card Widget ──
+// ── Recipe Card ──
 class _RecipeCard extends StatelessWidget {
   final Recipes recipe;
   final VoidCallback onTap;
 
-  const _RecipeCard({
-    required this.recipe,
-    required this.onTap,
-  });
+  const _RecipeCard({required this.recipe, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -526,7 +633,7 @@ class _RecipeCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.07),
+              color: const Color(0xFF000000).withOpacity(0.07),
               blurRadius: 12,
               offset: const Offset(0, 4),
             )
@@ -547,15 +654,17 @@ class _RecipeCard extends StatelessWidget {
                         errorBuilder: (_, __, ___) => Container(
                           color: const Color(0xFFF0E6D3),
                           child: const Center(
-                              child: Icon(Icons.restaurant,
-                                  color: Color(0xFFE07B2A), size: 40)),
+                            child: Icon(Icons.restaurant,
+                                color: Color(0xFFE07B2A), size: 40),
+                          ),
                         ),
                       )
                     : Container(
                         color: const Color(0xFFF0E6D3),
                         child: const Center(
-                            child: Icon(Icons.restaurant,
-                                color: Color(0xFFE07B2A), size: 40)),
+                          child: Icon(Icons.restaurant,
+                              color: Color(0xFFE07B2A), size: 40),
+                        ),
                       ),
               ),
             ),
@@ -580,19 +689,24 @@ class _RecipeCard extends StatelessWidget {
                       const Icon(Icons.star,
                           color: Color(0xFFE07B2A), size: 13),
                       const SizedBox(width: 3),
-                      Text('${recipe.rating ?? '--'}',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF555555),
-                              fontWeight: FontWeight.w600)),
+                      Text(
+                        '${recipe.rating ?? '--'}',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF555555),
+                            fontWeight: FontWeight.w600),
+                      ),
                       const Text(' · ',
-                          style: TextStyle(color: Color(0xFFCCCCCC))),
+                          style:
+                              TextStyle(color: Color(0xFFCCCCCC))),
                       const Icon(Icons.schedule,
                           color: Color(0xFF888888), size: 13),
                       const SizedBox(width: 3),
-                      Text('${recipe.cookTimeMinutes ?? '--'} min',
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF555555))),
+                      Text(
+                        '${recipe.cookTimeMinutes ?? '--'} min',
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFF555555)),
+                      ),
                     ],
                   ),
                 ],

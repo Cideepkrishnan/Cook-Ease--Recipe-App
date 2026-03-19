@@ -1,4 +1,4 @@
-package com.example.cook_ease
+package com.cideep.cookease
 
 import io.flutter.embedding.android.FlutterActivity
 
