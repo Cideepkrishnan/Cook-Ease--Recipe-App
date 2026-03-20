@@ -183,6 +183,12 @@ class _HomescreenState extends State<Homescreen> {
                                 builder: (_) => FavouritesScreen(
                                   favourites: favourites,
                                   onToggleFavourite: _toggleFavourite,
+                                  onClearAll: () {
+                                    setState(() {
+                                      favourites.clear();
+                                    });
+                                    _saveFavourites();
+                                  },
                                 ),
                               ),
                             ).then((_) {

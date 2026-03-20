@@ -1,17 +1,36 @@
-# cook_ease
+# CookEase 🍳
 
-A new Flutter project.
+A beautiful and simple recipe app built with Flutter.
 
-## Getting Started
+## ✨ Features
+- 🔍 Search recipes instantly
+- 🏷️ Filter by category (Breakfast, Lunch, Dinner, Desserts)
+- ❤️ Save favourite recipes (persisted locally)
+- 📶 Offline support with 24hr smart caching
+- ✨ Shimmer loading animations
+- 🔄 Retry on network failure
 
-This project is a starting point for a Flutter application.
+## 🛠️ Tech Stack
+- **Flutter** & **Dart**
+- **HTTP** — REST API integration
+- **SharedPreferences** — local data persistence
+- **Google Fonts** — custom typography
+- **DummyJSON API** — recipe data
 
-A few resources to get you started if this is your first Flutter project:
+## 🚀 Getting Started
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### Prerequisites
+- Flutter SDK ^3.11.1
+- Android Studio or VS Code
+- Android device or emulator
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+
+## 📲 Download
+Coming soon on Google Play Store 🚀
+
+## 🙋‍♂️ Author
+**Cideep Krishnan**
+- GitHub: [@Cideepkrishnan](https://github.com/Cideepkrishnan)
+
+## 📄 License
+MIT License

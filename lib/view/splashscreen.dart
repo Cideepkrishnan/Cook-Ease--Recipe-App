@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'homescreen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -83,44 +84,48 @@ class _SplashScreenState extends State<SplashScreen>
                     child: Text('🍳', style: TextStyle(fontSize: 56)),
                   ),
                 ),
+
                 const SizedBox(height: 24),
-                // App name
+
+                // App name with Google Font
                 RichText(
-                  text: const TextSpan(
+                  text: TextSpan(
                     children: [
                       TextSpan(
                         text: 'Cook',
-                        style: TextStyle(
-                          fontSize: 40,
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 44,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF1A1A1A),
+                          color: const Color(0xFF1A1A1A),
                           letterSpacing: -1,
                         ),
                       ),
                       TextSpan(
                         text: 'Ease',
-                        style: TextStyle(
-                          fontSize: 40,
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 44,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFFE07B2A),
+                          color: const Color(0xFFE07B2A),
                           letterSpacing: -1,
                         ),
                       ),
                     ],
                   ),
                 ),
+
                 const SizedBox(height: 8),
-                const Text(
+
+                // Tagline
+                Text(
                   'Delicious recipes, made simple.',
-                  style: TextStyle(
+                  style: GoogleFonts.lato(
                     fontSize: 15,
-                    color: Color(0xFF888888),
-                    letterSpacing: 0.2,
+                    color: const Color(0xFF888888),
+                    letterSpacing: 0.3,
                   ),
                 ),
+
                 const SizedBox(height: 60),
-                // Dots indicator
-                // 
               ],
             ),
           ),

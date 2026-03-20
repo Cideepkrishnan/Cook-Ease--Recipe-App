@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 class FavouritesScreen extends StatefulWidget {
   final List<Recipes> favourites;
   final void Function(Recipes) onToggleFavourite;
+  final VoidCallback onClearAll;
 
   const FavouritesScreen({
     super.key,
     required this.favourites,
     required this.onToggleFavourite,
+    required this.onClearAll,
   });
 
   @override
@@ -89,7 +91,7 @@ class _FavouritesScreenState extends State<FavouritesScreen> {
                               TextButton(
                                 onPressed: () {
                                   Navigator.pop(context);
-                                  widget.favourites.clear();
+                                  widget.onClearAll();
                                   setState(() {});
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
